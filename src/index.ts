@@ -144,28 +144,31 @@ function formatSlackMessage(payload: WebhookPayload, style: MessageStyle, proper
 function buildSimpleMessage(payload: WebhookPayload, propertyDetails: HospitableProperty | null = null): SlackMessage {
   const { data } = payload;
   const blocks: any[] = [];
-  // Sender / role line with optional image
-  const senderSection: any = {
-    type: 'section',
-    text: { type: 'mrkdwn', text: `*${escapeSlack(data.sender.full_name)}* — ${senderDisplay(payload)} (${proper(data.platform)})` }
-  };
   
-  // Add image accessory only if thumbnail_url exists
+  // Sender context block with optional image
+  const contextElements: any[] = [
+    { type: 'mrkdwn', text: `*${escapeSlack(data.sender.full_name)}* — ${senderDisplay(payload)} (${proper(data.platform)})` }
+  ];
+  
+  // Add sender image if available
   if (data.sender.thumbnail_url) {
-    senderSection.accessory = {
+    contextElements.push({
       type: 'image',
       image_url: data.sender.thumbnail_url,
       alt_text: data.sender.full_name
-    };
+    });
   }
   
-  blocks.push(senderSection);
+  blocks.push({
+    type: 'context',
+    elements: contextElements
+  });
 
   // Property information (if available)
   if (propertyDetails) {
     blocks.push({
       type: 'section',
-      text: { type: 'mrkdwn', text: `🏠 *Property:* ${escapeSlack(propertyDetails.public_name)}` }
+      text: { type: 'mrkdwn', text: `🏠 *Property:* ${escapeSlack(propertyDetails.public_name)} (ID: \`${propertyDetails.id}\`)` }
     });
   }
 
@@ -187,7 +190,7 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
   blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `:link: <${workerUrl}|Open in Hospitable Inbox>` } });
   // Attachments (if any) each on its own line after a title
   if (data.attachments && data.attachments.length) {
-    const lines = data.attachments.map(a => `• ${a.type}: ${a.url}`).join('\n');
+    const lines = data.attachments.map(a => `• ${a.type}: ${formatUrlAsHyperlink(a.url)}`).join('\n');
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Attachments*\n${lines}` } });
   }
   return { text: '', blocks };
@@ -220,30 +223,32 @@ function buildAttachmentMessage(payload: WebhookPayload, propertyDetails: Hospit
 // Style 2: Blocks layout (richer, modern Slack UI)
 function buildBlocksMessage(payload: WebhookPayload, propertyDetails: HospitableProperty | null = null): SlackMessage {
   const { data } = payload;
-  const headerText = `${data.sender.full_name}`;
   const blocks: any[] = [];
-  // Header with optional image
-  const headerSection: any = { 
-    type: 'section',
-    text: { type: 'mrkdwn', text: `*${data.sender.full_name}*` }
-  };
   
-  // Add image accessory only if thumbnail_url exists
+  // Header context block with optional image
+  const headerElements: any[] = [
+    { type: 'mrkdwn', text: `*${data.sender.full_name}*` }
+  ];
+  
+  // Add sender image if available
   if (data.sender.thumbnail_url) {
-    headerSection.accessory = {
+    headerElements.push({
       type: 'image',
       image_url: data.sender.thumbnail_url,
       alt_text: data.sender.full_name
-    };
+    });
   }
   
-  blocks.push(headerSection);
+  blocks.push({
+    type: 'context',
+    elements: headerElements
+  });
 
   // Property information (if available)
   if (propertyDetails) {
     blocks.push({
       type: 'section',
-      text: { type: 'mrkdwn', text: `🏠 *Property:* ${escapeSlack(propertyDetails.public_name)}` }
+      text: { type: 'mrkdwn', text: `🏠 *Property:* ${escapeSlack(propertyDetails.public_name)} (ID: \`${propertyDetails.id}\`)` }
     });
   }
 
@@ -268,14 +273,14 @@ function buildBlocksMessage(payload: WebhookPayload, propertyDetails: Hospitable
   blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `:link: <${workerUrl}|Open in Hospitable Inbox>` } });
   // Attachments list
   if (data.attachments && data.attachments.length) {
-    const lines = data.attachments.map(a => `• ${a.type}: ${a.url}`).join('\n');
+    const lines = data.attachments.map(a => `• ${a.type}: ${formatUrlAsHyperlink(a.url)}`).join('\n');
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Attachments*\n${lines}` } });
   }
   return { text: '', blocks };
 }
 
 // Style 3: Minimal single-line summary
-function buildMinimalMessage(payload: WebhookPayload): SlackMessage {
+function buildMinimalMessage(payload: WebhookPayload, propertyDetails: HospitableProperty | null = null): SlackMessage {
   const { data } = payload;
   const parts: string[] = [];
   
@@ -287,6 +292,12 @@ function buildMinimalMessage(payload: WebhookPayload): SlackMessage {
   }
   
   parts.push(`${proper(data.platform)} ${data.sender_type}`);
+
+  // Add property name and ID if available
+  if (propertyDetails) {
+    parts.push(`🏠 ${propertyDetails.public_name} (${propertyDetails.id})`);
+  }
+
   parts.push(`"${truncate(data.body, 80)}"`);
   parts.push(`Conv:${encodeId(data.conversation_id)}`);
   if (data.reservation_id !== data.conversation_id) parts.push(`Res:${encodeId(data.reservation_id)}`);
@@ -307,14 +318,20 @@ function senderDisplay(payload: WebhookPayload): string {
   return data.sender_role ? `${data.sender_type} (${data.sender_role})` : data.sender_type;
 }
 
-function baseFields(payload: WebhookPayload) {
+function baseFields(payload: WebhookPayload, propertyDetails: HospitableProperty | null = null) {
   const { data } = payload;
   const fields: any[] = [
     { title: 'Sender', value: senderDisplay(payload), short: true },
     { title: 'Platform', value: proper(data.platform), short: true },
     { title: 'Source', value: data.source.replace('_',' ').toUpperCase(), short: true },
-  { title: '', value: `_Conv: ${encodeId(data.conversation_id)}_`, short: true }
+    { title: '', value: `_Conv: ${encodeId(data.conversation_id)}_`, short: true }
   ];
+
+  // Add property field if available
+  if (propertyDetails) {
+    fields.push({ title: 'Property', value: `${propertyDetails.public_name} (ID: ${propertyDetails.id})`, short: true });
+  }
+
   return fields;
 }
 
@@ -328,9 +345,19 @@ function maybeAddReservation(payload: WebhookPayload, attachment: any) {
 function maybeAddAttachments(payload: WebhookPayload, attachment: any) {
   const { data } = payload;
   if (data.attachments && data.attachments.length > 0) {
-    const attachmentInfo = data.attachments.map(att => `📎 ${att.type}: ${att.url}`).join('\n');
+    const attachmentInfo = data.attachments.map(att => `📎 ${att.type}: ${formatUrlAsHyperlink(att.url)}`).join('\n');
     attachment.fields.push({ title: 'Attachments', value: attachmentInfo, short: false });
   }
+}
+
+// Helper function to format long URLs as hyperlinks
+function formatUrlAsHyperlink(url: string): string {
+  // If URL is longer than 50 characters, create a hyperlink with shortened text
+  if (url.length > 50) {
+    const filename = url.split('/').pop() || 'Link';
+    return `<${url}|${filename}>`;
+  }
+  return url;
 }
 
 // Encode a UUID as base64 (URL-safe, no padding)
