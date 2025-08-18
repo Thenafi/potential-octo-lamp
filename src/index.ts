@@ -146,11 +146,9 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
   const blocks: any[] = [];
   
   // Sender context block with optional image
-  const contextElements: any[] = [
-    { type: 'mrkdwn', text: `*${escapeSlack(data.sender.full_name)}* — ${senderDisplay(payload)} (${proper(data.platform)})` }
-  ];
+  const contextElements: any[] = [];
   
-  // Add sender image if available
+  // Add sender image first if available
   if (data.sender.thumbnail_url) {
     contextElements.push({
       type: 'image',
@@ -158,6 +156,9 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
       alt_text: data.sender.full_name
     });
   }
+  
+  // Then add the sender text
+  contextElements.push({ type: 'mrkdwn', text: `*${escapeSlack(data.sender.full_name)}* — ${senderDisplay(payload)} (${proper(data.platform)})` });
   
   blocks.push({
     type: 'context',
@@ -226,11 +227,9 @@ function buildBlocksMessage(payload: WebhookPayload, propertyDetails: Hospitable
   const blocks: any[] = [];
   
   // Header context block with optional image
-  const headerElements: any[] = [
-    { type: 'mrkdwn', text: `*${data.sender.full_name}*` }
-  ];
+  const headerElements: any[] = [];
   
-  // Add sender image if available
+  // Add sender image first if available
   if (data.sender.thumbnail_url) {
     headerElements.push({
       type: 'image',
@@ -238,6 +237,9 @@ function buildBlocksMessage(payload: WebhookPayload, propertyDetails: Hospitable
       alt_text: data.sender.full_name
     });
   }
+  
+  // Then add the sender text
+  headerElements.push({ type: 'mrkdwn', text: `*${data.sender.full_name}*` });
   
   blocks.push({
     type: 'context',
