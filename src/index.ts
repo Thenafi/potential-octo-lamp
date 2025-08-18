@@ -94,10 +94,15 @@ function formatSlackMessage(payload: WebhookPayload, style: MessageStyle): Slack
 function buildSimpleMessage(payload: WebhookPayload): SlackMessage {
   const { data } = payload;
   const blocks: any[] = [];
-  // Sender / role line
+  // Sender / role line with image
   blocks.push({
     type: 'section',
-    text: { type: 'mrkdwn', text: `*${escapeSlack(data.sender.full_name)}* — ${senderDisplay(payload)} (${proper(data.platform)})` }
+    text: { type: 'mrkdwn', text: `*${escapeSlack(data.sender.full_name)}* — ${senderDisplay(payload)} (${proper(data.platform)})` },
+    accessory: {
+      type: 'image',
+      image_url: data.sender.thumbnail_url,
+      alt_text: data.sender.full_name
+    }
   });
   // Body as code block (fallback if empty)
   const body = data.body && data.body.trim().length ? data.body : '(empty message)';
@@ -111,6 +116,10 @@ function buildSimpleMessage(payload: WebhookPayload): SlackMessage {
   metaLines.push(`Conversation: ${data.conversation_id}`);
   if (data.reservation_id !== data.conversation_id) metaLines.push(`Reservation: ${data.reservation_id}`);
   blocks.push({ type: 'section', text: { type: 'mrkdwn', text: metaLines.join('\n') } });
+  // Conversation link section
+  const encodedId = encodeId(data.conversation_id);
+  const workerUrl = `https://potential-octo-lamp.chest.workers.dev/conversation/${encodedId}`;
+  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `:link: <${workerUrl}|Open in Hospitable Inbox>` } });
   // Attachments (if any) each on its own line after a title
   if (data.attachments && data.attachments.length) {
     const lines = data.attachments.map(a => `• ${a.type}: ${a.url}`).join('\n');
@@ -132,6 +141,10 @@ function buildAttachmentMessage(payload: WebhookPayload): SlackMessage {
   };
   maybeAddAttachments(payload, attachment);
   maybeAddReservation(payload, attachment);
+  // Add conversation link as a field
+  const encodedId = encodeId(data.conversation_id);
+  const workerUrl = `https://potential-octo-lamp.chest.workers.dev/conversation/${encodedId}`;
+  attachment.fields.push({ title: '', value: `:link: <${workerUrl}|Open in Hospitable Inbox>`, short: false });
   return { text: '', attachments: [attachment] };
 }
 
@@ -140,8 +153,16 @@ function buildBlocksMessage(payload: WebhookPayload): SlackMessage {
   const { data } = payload;
   const headerText = `${data.sender.full_name}`;
   const blocks: any[] = [];
-  // Header
-  blocks.push({ type: 'header', text: { type: 'plain_text', text: headerText, emoji: true } });
+  // Header with image
+  blocks.push({ 
+    type: 'section',
+    text: { type: 'mrkdwn', text: `*${data.sender.full_name}*` },
+    accessory: {
+      type: 'image',
+      image_url: data.sender.thumbnail_url,
+      alt_text: data.sender.full_name
+    }
+  });
   // Context (sender + platform + source)
   blocks.push({
     type: 'context',
@@ -154,9 +175,13 @@ function buildBlocksMessage(payload: WebhookPayload): SlackMessage {
   // Message body
   blocks.push({ type: 'section', text: { type: 'mrkdwn', text: escapeSlack(data.body) || '_(empty message)_' } });
   // IDs row
-  const idsParts: string[] = [`_Conv: ${shortId(data.conversation_id)}_`];
-  if (data.reservation_id !== data.conversation_id) idsParts.push(`_Res: ${shortId(data.reservation_id)}_`);
+  const idsParts: string[] = [`_Conv: ${encodeId(data.conversation_id)}_`];
+  if (data.reservation_id !== data.conversation_id) idsParts.push(`_Res: ${encodeId(data.reservation_id)}_`);
   blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: idsParts.join('  •  ') }] });
+  // Conversation link section
+  const encodedId = encodeId(data.conversation_id);
+  const workerUrl = `https://potential-octo-lamp.chest.workers.dev/conversation/${encodedId}`;
+  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `:link: <${workerUrl}|Open in Hospitable Inbox>` } });
   // Attachments list
   if (data.attachments && data.attachments.length) {
     const lines = data.attachments.map(a => `• ${a.type}: ${a.url}`).join('\n');
@@ -169,10 +194,14 @@ function buildBlocksMessage(payload: WebhookPayload): SlackMessage {
 function buildMinimalMessage(payload: WebhookPayload): SlackMessage {
   const { data } = payload;
   const parts: string[] = [];
+  parts.push(`:bust_in_silhouette: <${data.sender.thumbnail_url}|${data.sender.full_name}>`);
   parts.push(`${proper(data.platform)} ${data.sender_type}`);
   parts.push(`"${truncate(data.body, 80)}"`);
-  parts.push(`Conv:${shortId(data.conversation_id)}`);
-  if (data.reservation_id !== data.conversation_id) parts.push(`Res:${shortId(data.reservation_id)}`);
+  parts.push(`Conv:${encodeId(data.conversation_id)}`);
+  if (data.reservation_id !== data.conversation_id) parts.push(`Res:${encodeId(data.reservation_id)}`);
+  const encodedId = encodeId(data.conversation_id);
+  const workerUrl = `https://potential-octo-lamp.chest.workers.dev/conversation/${encodedId}`;
+  parts.push(`:link: <${workerUrl}|Open in Hospitable Inbox>`);
   return { text: parts.join(' | ') };
 }
 
@@ -193,7 +222,7 @@ function baseFields(payload: WebhookPayload) {
     { title: 'Sender', value: senderDisplay(payload), short: true },
     { title: 'Platform', value: proper(data.platform), short: true },
     { title: 'Source', value: data.source.replace('_',' ').toUpperCase(), short: true },
-    { title: '', value: `_Conv: ${shortId(data.conversation_id)}_`, short: true }
+  { title: '', value: `_Conv: ${encodeId(data.conversation_id)}_`, short: true }
   ];
   return fields;
 }
@@ -201,7 +230,7 @@ function baseFields(payload: WebhookPayload) {
 function maybeAddReservation(payload: WebhookPayload, attachment: any) {
   const { data } = payload;
   if (data.reservation_id !== data.conversation_id) {
-    attachment.fields.push({ title: '', value: `_Res: ${shortId(data.reservation_id)}_`, short: true });
+    attachment.fields.push({ title: '', value: `_Res: ${encodeId(data.reservation_id)}_`, short: true });
   }
 }
 
@@ -213,7 +242,12 @@ function maybeAddAttachments(payload: WebhookPayload, attachment: any) {
   }
 }
 
-function shortId(id: string): string { return id.substring(0,8) + '...'; }
+// Encode a UUID as base64 (URL-safe, no padding)
+function encodeId(id: string): string {
+  // Polyfill for Buffer in Cloudflare Workers
+  const b64 = btoa(unescape(encodeURIComponent(id)));
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 function proper(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
 function truncate(s: string, n: number): string { return s.length > n ? s.slice(0,n-1) + '…' : s; }
 function escapeSlack(s: string): string { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
