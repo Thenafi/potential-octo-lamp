@@ -89,9 +89,6 @@ function formatSlackMessage(payload: WebhookPayload): SlackMessage {
     return `${senderType} (${role})`;
   };
 
-  // Create the main message text
-  const mainText = `💬 New message from ${data.platform.toUpperCase()}`;
-  
   const color = getColor(data.sender_type, data.platform);
   
   // Build the attachment with rich formatting
@@ -112,18 +109,16 @@ function formatSlackMessage(payload: WebhookPayload): SlackMessage {
         short: true
       },
       {
-        title: 'Conversation ID',
-        value: `\`${data.conversation_id.substring(0, 8)}...\``,
-        short: true
-      },
-      {
         title: 'Source',
         value: data.source.replace('_', ' ').toUpperCase(),
         short: true
+      },
+      {
+        title: '',
+        value: `_Conv: ${data.conversation_id.substring(0, 8)}..._`,
+        short: true
       }
-    ],
-    footer: `${data.platform.toUpperCase()} Integration`,
-    ts: Math.floor(new Date(created).getTime() / 1000)
+    ]
   };
 
   // Add attachment information if present
@@ -142,14 +137,14 @@ function formatSlackMessage(payload: WebhookPayload): SlackMessage {
   // Add reservation info if different from conversation
   if (data.reservation_id !== data.conversation_id) {
     attachment.fields.push({
-      title: 'Reservation ID',
-      value: `\`${data.reservation_id.substring(0, 8)}...\``,
+      title: '',
+      value: `_Res: ${data.reservation_id.substring(0, 8)}..._`,
       short: true
     });
   }
 
   return {
-    text: mainText,
+    text: "",
     attachments: [attachment]
   };
 }

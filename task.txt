@@ -3,3 +3,4 @@
 - hospitable to thread
 - hospitable to slack but encoded. 
 - slack url to conversation url in a page
+- threading
