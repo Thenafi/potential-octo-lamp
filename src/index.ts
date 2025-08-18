@@ -4,9 +4,12 @@ import { WebhookPayload, SlackMessage } from './types';
 
 // Configuration - Post to specific channel
 const SLACK_CHANNEL_ID = 'C08R24HBK7F';
-const SLACK_BOT_TOKEN = 'xoxb-your-bot-token'; // Set this in Wrangler secrets
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
-const SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK';
+
+// Environment interface for Cloudflare Workers
+interface Env {
+  SLACK_BOT_TOKEN: string;
+}
 
 // Channel routing logic - always post to the specified channel
 function getSlackChannel(payload: WebhookPayload): string {
@@ -14,12 +17,12 @@ function getSlackChannel(payload: WebhookPayload): string {
 }
 
 export default {
-  async fetch(request: Request): Promise<Response> {
-    return handleRequest(request);
+  async fetch(request: Request, env: Env): Promise<Response> {
+    return handleRequest(request, env);
   }
 };
 
-async function handleRequest(request: Request): Promise<Response> {
+async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   
   // Check if the request is for the /messages endpoint
@@ -30,7 +33,7 @@ async function handleRequest(request: Request): Promise<Response> {
   if (request.method === 'POST') {
     try {
       const payload: WebhookPayload = await request.json();
-      await postToSlack(payload);
+      await postToSlack(payload, env);
       return new Response('Message posted to Slack', { status: 200 });
     } catch (error) {
       console.error('Error processing request:', error);
@@ -41,28 +44,22 @@ async function handleRequest(request: Request): Promise<Response> {
   }
 }
 
-async function postToSlack(payload: WebhookPayload): Promise<void> {
+async function postToSlack(payload: WebhookPayload, env: Env): Promise<void> {
   const message = formatSlackMessage(payload);
   const channel = getSlackChannel(payload);
   
-  // Choose your approach:
-  // Option 1: Use Slack Web API (allows dynamic channel selection)
-  if (SLACK_BOT_TOKEN && SLACK_BOT_TOKEN !== 'xoxb-your-bot-token') {
-    await postToSlackAPI(message, channel);
-  } else {
-    // Option 2: Use webhook (single channel only)
-    await postToSlackWebhook(message);
-  }
+  // Use Slack Web API to post messages
+  await postToSlackAPI(message, channel, env);
 }
 
 // Slack Web API approach (recommended)
-async function postToSlackAPI(message: SlackMessage, channel: string): Promise<void> {
+async function postToSlackAPI(message: SlackMessage, channel: string, env: Env): Promise<void> {
   message.channel = channel;
   
   const response = await fetch(SLACK_API_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+      'Authorization': `Bearer ${env.SLACK_BOT_TOKEN}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(message),
@@ -72,21 +69,6 @@ async function postToSlackAPI(message: SlackMessage, channel: string): Promise<v
   
   if (!result.ok) {
     throw new Error(`Failed to post to Slack API: ${result.error || 'Unknown error'}`);
-  }
-}
-
-// Webhook approach (single channel)
-async function postToSlackWebhook(message: SlackMessage): Promise<void> {
-  const response = await fetch(SLACK_WEBHOOK_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(message),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to post to Slack webhook: ${response.status} ${response.statusText}`);
   }
 }
 
