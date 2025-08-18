@@ -156,7 +156,14 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
     text: { type: 'mrkdwn', text: headerText }
   });
 
-  // Image + sender details context block
+  // Body as code block (fallback if empty)
+  const body = data.body && data.body.trim().length ? data.body : '(empty message)';
+  blocks.push({
+    type: 'section',
+    text: { type: 'mrkdwn', text: '```' + escapeSlack(body) + '```' }
+  });
+
+  // Sender context with image after the message
   const contextElements: any[] = [];
   
   // Add sender image first if available
@@ -176,20 +183,6 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
     elements: contextElements
   });
 
-  // Subtle property details (public name and ID) - only if we have property details
-  if (propertyDetails) {
-    blocks.push({
-      type: 'context',
-      elements: [{ type: 'mrkdwn', text: `${escapeSlack(propertyDetails.public_name)} • ID: ${propertyDetails.id}` }]
-    });
-  }
-
-  // Body as code block (fallback if empty)
-  const body = data.body && data.body.trim().length ? data.body : '(empty message)';
-  blocks.push({
-    type: 'section',
-    text: { type: 'mrkdwn', text: '```' + escapeSlack(body) + '```' }
-  });
   // Metadata lines sequential (no columns) - smaller text
   let metaLines: string[] = [];
   metaLines.push(`Source: ${data.source.replace('_',' ').toUpperCase()}`);
