@@ -1,0 +1,5 @@
+- hospitable to slack
+- hospitable to slack with property data and reservation data
+- hospitable to thread
+- hospitable to slack but encoded. 
+- slack url to conversation url in a page

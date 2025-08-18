@@ -1,0 +1,25 @@
+{
+  "name": "cloudflare-worker-slack-webhook",
+  "version": "1.0.0",
+  "description": "A Cloudflare Worker that receives webhooks and posts messages to Slack.",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "wrangler publish"
+  },
+  "dependencies": {
+    "node-fetch": "^2.6.1"
+  },
+  "devDependencies": {
+    "typescript": "^4.5.4",
+    "@cloudflare/workers-types": "^2.2.0"
+  },
+  "keywords": [
+    "cloudflare",
+    "worker",
+    "slack",
+    "webhook"
+  ],
+  "author": "",
+  "license": "MIT"
+}

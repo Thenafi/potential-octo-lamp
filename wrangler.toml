@@ -1,0 +1,6 @@
+name = "slack-webhook-worker"
+main = "dist/index.js"
+compatibility_date = "2023-10-01"
+
+[build]
+command = "npm run build"
