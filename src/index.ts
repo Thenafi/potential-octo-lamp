@@ -25,9 +25,24 @@ export default {
 async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   
+  // Handle conversation redirect endpoint
+  if (url.pathname.startsWith('/conversation/')) {
+    const encodedId = url.pathname.split('/conversation/')[1];
+    if (encodedId) {
+      try {
+        const decodedId = decodeId(encodedId);
+        const hospitableUrl = `https://my.hospitable.com/inbox/thread/${decodedId}`;
+        return Response.redirect(hospitableUrl, 302);
+      } catch (error) {
+        return new Response('Invalid conversation ID', { status: 400 });
+      }
+    }
+    return new Response('Missing conversation ID', { status: 400 });
+  }
+  
   // Check if the request is for the /messages endpoint
   if (url.pathname !== '/messages') {
-    return new Response('Not Found - Use /messages endpoint', { status: 404 });
+    return new Response('Not Found - Use /messages or /conversation/<id> endpoints', { status: 404 });
   }
   
   if (request.method === 'POST') {
@@ -94,16 +109,22 @@ function formatSlackMessage(payload: WebhookPayload, style: MessageStyle): Slack
 function buildSimpleMessage(payload: WebhookPayload): SlackMessage {
   const { data } = payload;
   const blocks: any[] = [];
-  // Sender / role line with image
-  blocks.push({
+  // Sender / role line with optional image
+  const senderSection: any = {
     type: 'section',
-    text: { type: 'mrkdwn', text: `*${escapeSlack(data.sender.full_name)}* — ${senderDisplay(payload)} (${proper(data.platform)})` },
-    accessory: {
+    text: { type: 'mrkdwn', text: `*${escapeSlack(data.sender.full_name)}* — ${senderDisplay(payload)} (${proper(data.platform)})` }
+  };
+  
+  // Add image accessory only if thumbnail_url exists
+  if (data.sender.thumbnail_url) {
+    senderSection.accessory = {
       type: 'image',
       image_url: data.sender.thumbnail_url,
       alt_text: data.sender.full_name
-    }
-  });
+    };
+  }
+  
+  blocks.push(senderSection);
   // Body as code block (fallback if empty)
   const body = data.body && data.body.trim().length ? data.body : '(empty message)';
   blocks.push({
@@ -113,8 +134,8 @@ function buildSimpleMessage(payload: WebhookPayload): SlackMessage {
   // Metadata lines sequential (no columns)
   let metaLines: string[] = [];
   metaLines.push(`Source: ${data.source.replace('_',' ').toUpperCase()}`);
-  metaLines.push(`Conversation: ${data.conversation_id}`);
-  if (data.reservation_id !== data.conversation_id) metaLines.push(`Reservation: ${data.reservation_id}`);
+  metaLines.push(`Conversation: ${encodeId(data.conversation_id)}`);
+  if (data.reservation_id !== data.conversation_id) metaLines.push(`Reservation: ${encodeId(data.reservation_id)}`);
   blocks.push({ type: 'section', text: { type: 'mrkdwn', text: metaLines.join('\n') } });
   // Conversation link section
   const encodedId = encodeId(data.conversation_id);
@@ -135,10 +156,14 @@ function buildAttachmentMessage(payload: WebhookPayload): SlackMessage {
   const attachment: any = {
     color,
     author_name: data.sender.full_name,
-    author_icon: data.sender.thumbnail_url,
     text: data.body,
     fields: baseFields(payload)
   };
+  
+  // Add author icon only if thumbnail_url exists
+  if (data.sender.thumbnail_url) {
+    attachment.author_icon = data.sender.thumbnail_url;
+  }
   maybeAddAttachments(payload, attachment);
   maybeAddReservation(payload, attachment);
   // Add conversation link as a field
@@ -153,16 +178,22 @@ function buildBlocksMessage(payload: WebhookPayload): SlackMessage {
   const { data } = payload;
   const headerText = `${data.sender.full_name}`;
   const blocks: any[] = [];
-  // Header with image
-  blocks.push({ 
+  // Header with optional image
+  const headerSection: any = { 
     type: 'section',
-    text: { type: 'mrkdwn', text: `*${data.sender.full_name}*` },
-    accessory: {
+    text: { type: 'mrkdwn', text: `*${data.sender.full_name}*` }
+  };
+  
+  // Add image accessory only if thumbnail_url exists
+  if (data.sender.thumbnail_url) {
+    headerSection.accessory = {
       type: 'image',
       image_url: data.sender.thumbnail_url,
       alt_text: data.sender.full_name
-    }
-  });
+    };
+  }
+  
+  blocks.push(headerSection);
   // Context (sender + platform + source)
   blocks.push({
     type: 'context',
@@ -194,7 +225,14 @@ function buildBlocksMessage(payload: WebhookPayload): SlackMessage {
 function buildMinimalMessage(payload: WebhookPayload): SlackMessage {
   const { data } = payload;
   const parts: string[] = [];
-  parts.push(`:bust_in_silhouette: <${data.sender.thumbnail_url}|${data.sender.full_name}>`);
+  
+  // Add sender image link only if thumbnail_url exists
+  if (data.sender.thumbnail_url) {
+    parts.push(`:bust_in_silhouette: <${data.sender.thumbnail_url}|${data.sender.full_name}>`);
+  } else {
+    parts.push(`:bust_in_silhouette: ${data.sender.full_name}`);
+  }
+  
   parts.push(`${proper(data.platform)} ${data.sender_type}`);
   parts.push(`"${truncate(data.body, 80)}"`);
   parts.push(`Conv:${encodeId(data.conversation_id)}`);
@@ -247,6 +285,18 @@ function encodeId(id: string): string {
   // Polyfill for Buffer in Cloudflare Workers
   const b64 = btoa(unescape(encodeURIComponent(id)));
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// Decode a base64-encoded UUID back to original
+function decodeId(encodedId: string): string {
+  // Reverse URL-safe base64 to standard base64
+  let b64 = encodedId.replace(/-/g, '+').replace(/_/g, '/');
+  // Add padding if needed
+  while (b64.length % 4) {
+    b64 += '=';
+  }
+  // Decode from base64
+  return decodeURIComponent(escape(atob(b64)));
 }
 function proper(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
 function truncate(s: string, n: number): string { return s.length > n ? s.slice(0,n-1) + '…' : s; }
