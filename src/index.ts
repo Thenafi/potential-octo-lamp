@@ -180,7 +180,7 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
   if (propertyDetails) {
     blocks.push({
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: `${escapeSlack(propertyDetails.public_name)} • ID: \`${propertyDetails.id}\`` }]
+      elements: [{ type: 'mrkdwn', text: `${escapeSlack(propertyDetails.public_name)} • ID: ${propertyDetails.id}` }]
     });
   }
 
@@ -195,6 +195,12 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
   metaLines.push(`Source: ${data.source.replace('_',' ').toUpperCase()}`);
   metaLines.push(`Conversation: ${encodeId(data.conversation_id)}`);
   if (data.reservation_id !== data.conversation_id) metaLines.push(`Reservation: ${encodeId(data.reservation_id)}`);
+  
+  // Add property details to metadata if available
+  if (propertyDetails) {
+    metaLines.push(`${escapeSlack(propertyDetails.public_name)} • ID: ${propertyDetails.id}`);
+  }
+  
   blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: metaLines.join('\n') }] });
   // Conversation link section
   const encodedId = encodeId(data.conversation_id);
