@@ -157,12 +157,18 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
     });
   }
   
-  // Then add the sender text
-  contextElements.push({ type: 'mrkdwn', text: `*${escapeSlack(data.sender.full_name)}* — ${senderDisplay(payload)} (${proper(data.platform)})` });
+  // Add small sender details in context
+  contextElements.push({ type: 'mrkdwn', text: `${senderDisplay(payload)} (${proper(data.platform)})` });
   
   blocks.push({
     type: 'context',
     elements: contextElements
+  });
+
+  // Sender name as main section (like property)
+  blocks.push({
+    type: 'section',
+    text: { type: 'mrkdwn', text: `👤 *${escapeSlack(data.sender.full_name)}*` }
   });
 
   // Property information (if available)
@@ -179,12 +185,12 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
     type: 'section',
     text: { type: 'mrkdwn', text: '```' + escapeSlack(body) + '```' }
   });
-  // Metadata lines sequential (no columns)
+  // Metadata lines sequential (no columns) - smaller text
   let metaLines: string[] = [];
   metaLines.push(`Source: ${data.source.replace('_',' ').toUpperCase()}`);
   metaLines.push(`Conversation: ${encodeId(data.conversation_id)}`);
   if (data.reservation_id !== data.conversation_id) metaLines.push(`Reservation: ${encodeId(data.reservation_id)}`);
-  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: metaLines.join('\n') } });
+  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: metaLines.join('\n') }] });
   // Conversation link section
   const encodedId = encodeId(data.conversation_id);
   const workerUrl = `https://potential-octo-lamp.chest.workers.dev/conversation/${encodedId}`;
@@ -238,12 +244,18 @@ function buildBlocksMessage(payload: WebhookPayload, propertyDetails: Hospitable
     });
   }
   
-  // Then add the sender text
-  headerElements.push({ type: 'mrkdwn', text: `*${data.sender.full_name}*` });
+  // Add small sender details in context
+  headerElements.push({ type: 'mrkdwn', text: `${senderDisplay(payload)} (${proper(data.platform)})` });
   
   blocks.push({
     type: 'context',
     elements: headerElements
+  });
+
+  // Sender name as main section (like property)
+  blocks.push({
+    type: 'section',
+    text: { type: 'mrkdwn', text: `👤 *${data.sender.full_name}*` }
   });
 
   // Property information (if available)
@@ -254,7 +266,7 @@ function buildBlocksMessage(payload: WebhookPayload, propertyDetails: Hospitable
     });
   }
 
-  // Context (sender + platform + source)
+  // Context (sender + platform + source) - smaller text
   blocks.push({
     type: 'context',
     elements: [
@@ -265,7 +277,7 @@ function buildBlocksMessage(payload: WebhookPayload, propertyDetails: Hospitable
   });
   // Message body
   blocks.push({ type: 'section', text: { type: 'mrkdwn', text: escapeSlack(data.body) || '_(empty message)_' } });
-  // IDs row
+  // IDs row - smaller text
   const idsParts: string[] = [`_Conv: ${encodeId(data.conversation_id)}_`];
   if (data.reservation_id !== data.conversation_id) idsParts.push(`_Res: ${encodeId(data.reservation_id)}_`);
   blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: idsParts.join('  •  ') }] });
