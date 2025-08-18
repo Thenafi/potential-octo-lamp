@@ -123,7 +123,7 @@ function formatSlackMessage(payload: WebhookPayload): SlackMessage {
       }
     ],
     footer: `${data.platform.toUpperCase()} Integration`,
-    ts: Math.floor(new Date(data.created_at).getTime() / 1000)
+    ts: Math.floor(new Date(created).getTime() / 1000)
   };
 
   // Add attachment information if present
