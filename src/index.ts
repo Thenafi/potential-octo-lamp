@@ -145,7 +145,18 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
   const { data } = payload;
   const blocks: any[] = [];
   
-  // Sender context block with optional image
+  // Main header: Sender name - Property name
+  let headerText = `*${escapeSlack(data.sender.full_name)}*`;
+  if (propertyDetails) {
+    headerText += ` - ${escapeSlack(propertyDetails.name)}`;
+  }
+  
+  blocks.push({
+    type: 'section',
+    text: { type: 'mrkdwn', text: headerText }
+  });
+
+  // Image + sender details context block
   const contextElements: any[] = [];
   
   // Add sender image first if available
@@ -157,7 +168,7 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
     });
   }
   
-  // Add small sender details in context
+  // Add sender details
   contextElements.push({ type: 'mrkdwn', text: `${senderDisplay(payload)} (${proper(data.platform)})` });
   
   blocks.push({
@@ -165,17 +176,11 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
     elements: contextElements
   });
 
-  // Sender name as main section (like property)
-  blocks.push({
-    type: 'section',
-    text: { type: 'mrkdwn', text: `👤 *${escapeSlack(data.sender.full_name)}*` }
-  });
-
-  // Property information (if available)
+  // Subtle property details (public name and ID) - only if we have property details
   if (propertyDetails) {
     blocks.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: `🏠 *Property:* ${escapeSlack(propertyDetails.public_name)} (ID: \`${propertyDetails.id}\`)` }
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `${escapeSlack(propertyDetails.public_name)} • ID: \`${propertyDetails.id}\`` }]
     });
   }
 

@@ -1,72 +1,116 @@
 # Cloudflare Worker Slack Webhook
 
-This project implements # Cloudflare Worker Slack Webhook
+A Cloudflare Worker that receives Hospitable webhooks and posts formatted messages to Slack with rich formatting**Simple Style (Default):**
+```
+Jane Doe - Relaxing Villa near the sea
 
-A Cloudflare Worker that acts as a webhook receiver to post formatted messages to Slack with intelligent channel routing.
+👤 Jane Doe    guest (Airbnb)
+
+Relaxing Villa near the sea • ID: prop_123
+
+```
+Hello, there.
+```
+
+Source: PUBLIC API
+Conversation: YWJjMTIzNDU2Nzg5
+Reservation: ZGVmOTg3NjU0MzIx
+
+🔗 Open in Hospitable Inbox
+
+Attachments
+• image: image.jpg
+```gration.
 
 ## Features
 
-- ✅ **Rich Slack Message Formatting**: Beautiful, structured messages with colors, author info, and attachments
-- ✅ **Smart Channel Routing**: Route messages to different channels based on platform, sender type, or custom logic
-- ✅ **Multiple Integration Methods**: Support for both Slack Web API (recommended) and Incoming Webhooks
+- ✅ **Rich Slack Message Formatting**: Multiple message styles with colors, author info, and attachments
+- ✅ **Hospitable Integration**: Fetches property details and reservation information via Hospitable API
+- ✅ **Multiple Message Styles**: 4 different formatting styles (simple, blocks, attachment, minimal)
+- ✅ **Conversation Redirection**: URL shortener for Hospitable inbox conversations
+- ✅ **Slack Web API Integration**: Uses Slack Bot tokens for reliable message posting
 - ✅ **TypeScript Support**: Fully typed for better development experience
-- ✅ **Configurable**: Easy configuration for different platforms and routing strategies
+- ✅ **Attachment Handling**: Processes and displays message attachments with smart URL formatting
+- ✅ **ID Encoding**: Base64 URL-safe encoding for conversation and reservation IDs
 
-## Channel Routing Options
+## Message Formatting Styles
 
-### Option 1: Slack Web API (Recommended) ⭐
-**Pros:**
-- Can post to ANY channel dynamically
-- Better error handling and responses
-- Access to advanced Slack features
-- Rate limiting information
+The worker supports 4 different message formatting styles, selectable via URL parameter `?style=<style>`:
 
-**Setup:**
-1. Create a Slack App at https://api.slack.com/apps
-2. Add the `chat:write` OAuth scope
-3. Install the app to your workspace
-4. Get the Bot Token (starts with `xoxb-`)
-5. Set it as a Wrangler secret: `wrangler secret put SLACK_BOT_TOKEN`
+### 1. Simple Style (Default)
+- Clean block-based layout with code-formatted message body
+- Includes property information when available
+- Sequential metadata display
+- Direct conversation link to Hospitable inbox
 
-### Option 2: Incoming Webhooks
-**Pros:**
-- Simple setup
-- No token management
+### 2. Blocks Style
+- Modern Slack blocks UI with rich formatting
+- Header with sender context and optional profile image
+- Property information prominently displayed
+- Metadata in compact context blocks
 
-**Cons:**
-- Fixed to one channel only
-- Limited customization
+### 3. Attachment Style
+- Traditional Slack attachment format with colored sidebar
+- Color coding based on sender type and platform
+- Structured field layout
+- Support for author icons
 
-**Setup:**
-1. Create an Incoming Webhook in Slack
-2. Update `SLACK_WEBHOOK_URL` in the code
+### 4. Minimal Style
+- Single-line summary format
+- Truncated message preview (80 chars)
+- Essential information only
+- Ideal for high-volume channels
 
-## Channel Routing Configuration
+## API Endpoints
 
-Edit `/src/config.ts` to configure channel routing:
+### POST /messages
+Main webhook endpoint for receiving Hospitable message notifications.
 
-```typescript
-export const SLACK_CHANNEL_CONFIG: ChannelConfig[] = [
-  {
-    platform: 'airbnb',
-    channel: '#airbnb-messages',
-    senderTypeRouting: {
-      guest: '#airbnb-guest-messages',
-      host: '#airbnb-host-messages'
-    }
-  },
-  // Add more platforms...
-];
+**Parameters:**
+- `style` (optional): Message formatting style - `simple`, `blocks`, `attachment`, or `minimal`
+
+**Example:**
+```bash
+POST https://your-worker.workers.dev/messages?style=blocks
 ```
 
-### Available Routing Strategies:
+### GET /conversation/{encoded_id}
+Redirect endpoint that decodes conversation IDs and redirects to Hospitable inbox.
 
-1. **By Platform**: Different channels for Airbnb, Booking.com, etc.
-2. **By Sender Type**: Separate channels for guests vs hosts
-3. **By Platform + Sender**: Combination routing (e.g., `#airbnb-guest-messages`)
-4. **By Content**: Route urgent messages to priority channels
-5. **By Time**: Business hours vs after-hours routing
-6. **By Reservation**: Property-specific channels
+**Example:**
+```
+https://your-worker.workers.dev/conversation/abc123def456
+# Redirects to: https://my.hospitable.com/inbox/thread/{decoded_id}
+```
+
+## Configuration
+
+The worker is configured to post to a specific Slack channel (currently hardcoded). To modify the target channel, update the `SLACK_CHANNEL_ID` constant in `src/index.ts`:
+
+```typescript
+const SLACK_CHANNEL_ID = 'C08R24HBK7F'; // Your Slack channel ID
+```
+
+## Setup
+
+1. **Create a Slack App:**
+   - Go to https://api.slack.com/apps
+   - Create a new app and add the `chat:write` OAuth scope
+   - Install the app to your workspace
+   - Copy the Bot Token (starts with `xoxb-`)
+
+2. **Create a Hospitable API Token:**
+   - Generate an API token in your Hospitable account
+   - Ensure it has permissions to read reservations and properties
+
+3. **Configure Environment Variables:**
+   ```bash
+   # Set Slack bot token
+   wrangler secret put SLACK_BOT_TOKEN
+
+   # Set Hospitable API token  
+   wrangler secret put HOSPITABLE_API_TOKEN
+   ```
 
 ## Deployment
 
@@ -78,29 +122,39 @@ npm install
 npm run build
 
 # Deploy to Cloudflare Workers
-wrangler publish
-
-# Set your Slack bot token (for Web API)
-wrangler secret put SLACK_BOT_TOKEN
+wrangler deploy
 ```
 
 ## Webhook Payload
 
-The worker expects webhook payloads in this format:
+The worker expects Hospitable webhook payloads in this format:
 
 ```json
 {
   "id": "497f6eca-6276-4993-bfeb-53cbbbba6f08",
   "data": {
     "platform": "airbnb",
-    "sender_type": "host|guest",
-    "sender_role": "host|co-host|teammate|null",
+    "conversation_id": "12345678-1234-1234-1234-123456789012",
+    "reservation_id": "87654321-4321-4321-4321-210987654321",
+    "sender_type": "guest",
+    "sender_role": "host",
     "body": "Hello, there.",
     "sender": {
+      "first_name": "Jane",
       "full_name": "Jane Doe",
-      "thumbnail_url": "https://..."
+      "locale": "en",
+      "picture_url": "https://...",
+      "thumbnail_url": "https://...",
+      "location": "New York, NY"
     },
-    // ... more fields
+    "attachments": [
+      {
+        "type": "image",
+        "url": "https://example.com/image.jpg"
+      }
+    ],
+    "source": "PUBLIC_API",
+    "created_at": "2024-10-08T07:03:34Z"
   },
   "action": "message.created",
   "created": "2024-10-08T07:03:34Z"
@@ -111,25 +165,40 @@ The worker expects webhook payloads in this format:
 
 The formatted message will appear in Slack as:
 
+**Simple Style (Default):**
 ```
-💬 New message from AIRBNB
+� Jane Doe (Airbnb)
+🏠 Property: Cozy Downtown Apartment (ID: prop_123)
 
-Jane Doe
+```
 Hello, there.
+```
 
-Sender: guest (teammate)    Platform: Airbnb
-Conversation ID: becd1474...    Source: PUBLIC API
+Source: PUBLIC API
+Conversation: YWJjMTIzNDU2Nzg5
+Reservation: ZGVmOTg3NjU0MzIx
 
-📎 Attachments
-📎 image: https://example.com/image.jpg
+🔗 Open in Hospitable Inbox
 
-AIRBNB Integration • Today at 2:03 PM
+Attachments
+• image: image.jpg
+```
+
+**Blocks Style:**
+Modern Slack blocks layout with profile images, structured sections, and rich formatting.
+
+**Attachment Style:**
+Traditional colored sidebar attachments with field-based layout.
+
+**Minimal Style:**
+```
+👤 Jane Doe | Airbnb guest | 🏠 Cozy Downtown Apartment (prop_123) | "Hello, there." | Conv:YWJjMTIz | 🔗 Open in Hospitable Inbox
 ```
 
 ## Environment Variables
 
-- `SLACK_BOT_TOKEN`: Your Slack Bot Token (for Web API method)
-- `SLACK_WEBHOOK_URL`: Your Slack Webhook URL (for webhook method)
+- `SLACK_BOT_TOKEN`: Your Slack Bot Token (required)
+- `HOSPITABLE_API_TOKEN`: Your Hospitable API token (required)
 
 ## Development
 
@@ -137,44 +206,39 @@ AIRBNB Integration • Today at 2:03 PM
 # Start development server
 wrangler dev
 
-# Test webhook locally
-curl -X POST http://localhost:8787 
-  -H "Content-Type: application/json" 
+# Test webhook locally with different styles
+curl -X POST http://localhost:8787/messages?style=simple \
+  -H "Content-Type: application/json" \
   -d @test-payload.json
-```
- 
 
-## Table of Contents
-- [Installation](#installation)
-- [Usage](#usage)
-- [Configuration](#configuration)
-- [License](#license)
+curl -X POST http://localhost:8787/messages?style=blocks \
+  -H "Content-Type: application/json" \
+  -d @test-payload.json
 
-## Installation
-
-1. Clone the repository:
-   ```
-   git clone <repository-url>
-   cd cloudflare-worker-slack-webhook
-   ```
-
-2. Install the dependencies:
-   ```
-   npm install
-   ```
-
-## Usage
-
-To deploy the Cloudflare Worker, use the following command:
-```
-npx wrangler publish
+# Test conversation redirect
+curl http://localhost:8787/conversation/YWJjMTIzNDU2Nzg5
 ```
 
-Once deployed, the worker will listen for incoming webhook requests. You can send a POST request to the worker's URL with the necessary data to post messages to Slack.
+## Key Features Explained
 
-## Configuration
+### Property Integration
+The worker automatically fetches property details from Hospitable API using the `reservation_id` from the webhook payload, displaying property name and ID in the message.
 
-To configure the webhook and Slack integration, update the `wrangler.toml` file with your Cloudflare account details and the Slack webhook URL in the `src/index.ts` file.
+### ID Encoding
+Conversation and reservation IDs are encoded using URL-safe base64 to create shorter, more manageable identifiers in messages.
+
+### Smart URL Formatting
+Long attachment URLs are automatically converted to hyperlinks with shortened display text (filename only) for better readability.
+
+### Conversation Redirect
+The `/conversation/{encoded_id}` endpoint provides a convenient way to redirect users directly to the Hospitable inbox conversation.
+
+## Architecture
+
+- **Runtime**: Cloudflare Workers (Edge computing)
+- **Language**: TypeScript
+- **APIs**: Slack Web API, Hospitable Public API v2
+- **Message Formats**: Slack Blocks, Attachments, Plain Text
 
 ## License
 
