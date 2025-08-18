@@ -1,25 +1,9 @@
 # Cloudflare Worker Slack Webhook
 
-A Cloudflare Worker that receives Hospitable webhooks and posts formatted messages to Slack with rich formatting**Simple Style (Default):**
-```
-Jane Doe - Relaxing Villa near the sea
+A Cloudflare Worker that receives Hospitable webhooks and posts formatted messages to Slack with rich formatting## Environment Variables
 
-👤 Jane Doe    guest (Airbnb)
-
-Relaxing Villa near the sea • ID: prop_123
-
-```
-Hello, there.
-```
-
-Source: PUBLIC API
-Conversation: YWJjMTIzNDU2Nzg5
-Reservation: ZGVmOTg3NjU0MzIx
-
-🔗 Open in Hospitable Inbox
-
-Attachments
-• image: image.jpg
+- `SLACK_BOT_TOKEN`: Your Slack Bot Token (required)
+- `HOSPITABLE_API_TOKEN`: Your Hospitable API token (required)
 ```gration.
 
 ## Features
