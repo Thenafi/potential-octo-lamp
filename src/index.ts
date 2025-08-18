@@ -33,7 +33,9 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'POST') {
     try {
       const payload: WebhookPayload = await request.json();
-      await postToSlack(payload, env);
+  const styleParam = (url.searchParams.get('style') || '').toLowerCase();
+  const style: MessageStyle = styleParam === 'blocks' || styleParam === 'minimal' || styleParam === 'attachment' ? styleParam as MessageStyle : 'attachment';
+  await postToSlack(payload, env, style);
       return new Response('Message posted to Slack', { status: 200 });
     } catch (error) {
       console.error('Error processing request:', error);
@@ -44,8 +46,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   }
 }
 
-async function postToSlack(payload: WebhookPayload, env: Env): Promise<void> {
-  const message = formatSlackMessage(payload);
+type MessageStyle = 'attachment' | 'blocks' | 'minimal';
+
+async function postToSlack(payload: WebhookPayload, env: Env, style: MessageStyle): Promise<void> {
+  const message = formatSlackMessage(payload, style);
   const channel = getSlackChannel(payload);
   
   // Use Slack Web API to post messages
@@ -72,79 +76,113 @@ async function postToSlackAPI(message: SlackMessage, channel: string, env: Env):
   }
 }
 
-function formatSlackMessage(payload: WebhookPayload): SlackMessage {
-  const { data, action, created } = payload;
-  
-  // Determine the color based on sender type and platform
-  const getColor = (senderType: string, platform: string): string => {
-    if (platform === 'airbnb') {
-      return senderType === 'guest' ? '#FF5A5F' : '#00A699';
-    }
-    return senderType === 'guest' ? '#ff6b6b' : '#4ecdc4';
-  };
+function formatSlackMessage(payload: WebhookPayload, style: MessageStyle): SlackMessage {
+  switch (style) {
+    case 'blocks':
+      return buildBlocksMessage(payload);
+    case 'minimal':
+      return buildMinimalMessage(payload);
+    case 'attachment':
+    default:
+      return buildAttachmentMessage(payload);
+  }
+}
 
-  // Format sender role display
-  const getSenderRoleDisplay = (role: string | null, senderType: string): string => {
-    if (!role) return senderType;
-    return `${senderType} (${role})`;
-  };
-
-  const color = getColor(data.sender_type, data.platform);
-  
-  // Build the attachment with rich formatting
-  const attachment = {
-    color: color,
+// Style 1: Original attachment-based message (cleaned)
+function buildAttachmentMessage(payload: WebhookPayload): SlackMessage {
+  const { data } = payload;
+  const color = deriveColor(data.sender_type, data.platform);
+  const attachment: any = {
+    color,
     author_name: data.sender.full_name,
     author_icon: data.sender.thumbnail_url,
     text: data.body,
-    fields: [
-      {
-        title: 'Sender',
-        value: getSenderRoleDisplay(data.sender_role, data.sender_type),
-        short: true
-      },
-      {
-        title: 'Platform',
-        value: data.platform.charAt(0).toUpperCase() + data.platform.slice(1),
-        short: true
-      },
-      {
-        title: 'Source',
-        value: data.source.replace('_', ' ').toUpperCase(),
-        short: true
-      },
-      {
-        title: '',
-        value: `_Conv: ${data.conversation_id.substring(0, 8)}..._`,
-        short: true
-      }
-    ]
+    fields: baseFields(payload)
   };
-
-  // Add attachment information if present
-  if (data.attachments && data.attachments.length > 0) {
-    const attachmentInfo = data.attachments.map(att => 
-      `📎 ${att.type}: ${att.url}`
-    ).join('\n');
-    
-    attachment.fields.push({
-      title: 'Attachments',
-      value: attachmentInfo,
-      short: false
-    });
-  }
-
-  // Add reservation info if different from conversation
-  if (data.reservation_id !== data.conversation_id) {
-    attachment.fields.push({
-      title: '',
-      value: `_Res: ${data.reservation_id.substring(0, 8)}..._`,
-      short: true
-    });
-  }
-
-  return {
-    text: "",
-    attachments: [attachment]
-  };
+  maybeAddAttachments(payload, attachment);
+  maybeAddReservation(payload, attachment);
+  return { text: '', attachments: [attachment] };
 }
+
+// Style 2: Blocks layout (richer, modern Slack UI)
+function buildBlocksMessage(payload: WebhookPayload): SlackMessage {
+  const { data } = payload;
+  const headerText = `${data.sender.full_name}`;
+  const blocks: any[] = [];
+  // Header
+  blocks.push({ type: 'header', text: { type: 'plain_text', text: headerText, emoji: true } });
+  // Context (sender + platform + source)
+  blocks.push({
+    type: 'context',
+    elements: [
+      { type: 'mrkdwn', text: `*Platform:* ${proper(data.platform)}` },
+      { type: 'mrkdwn', text: `*Sender:* ${senderDisplay(payload)}` },
+      { type: 'mrkdwn', text: `*Source:* ${data.source.replace('_',' ').toUpperCase()}` }
+    ]
+  });
+  // Message body
+  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: escapeSlack(data.body) || '_(empty message)_' } });
+  // IDs row
+  const idsParts: string[] = [`_Conv: ${shortId(data.conversation_id)}_`];
+  if (data.reservation_id !== data.conversation_id) idsParts.push(`_Res: ${shortId(data.reservation_id)}_`);
+  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: idsParts.join('  •  ') }] });
+  // Attachments list
+  if (data.attachments && data.attachments.length) {
+    const lines = data.attachments.map(a => `• ${a.type}: ${a.url}`).join('\n');
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Attachments*\n${lines}` } });
+  }
+  return { text: '', blocks };
+}
+
+// Style 3: Minimal single-line summary
+function buildMinimalMessage(payload: WebhookPayload): SlackMessage {
+  const { data } = payload;
+  const parts: string[] = [];
+  parts.push(`${proper(data.platform)} ${data.sender_type}`);
+  parts.push(`"${truncate(data.body, 80)}"`);
+  parts.push(`Conv:${shortId(data.conversation_id)}`);
+  if (data.reservation_id !== data.conversation_id) parts.push(`Res:${shortId(data.reservation_id)}`);
+  return { text: parts.join(' | ') };
+}
+
+// Shared helpers
+function deriveColor(senderType: string, platform: string): string {
+  if (platform === 'airbnb') return senderType === 'guest' ? '#FF5A5F' : '#00A699';
+  return senderType === 'guest' ? '#ff6b6b' : '#4ecdc4';
+}
+
+function senderDisplay(payload: WebhookPayload): string {
+  const { data } = payload;
+  return data.sender_role ? `${data.sender_type} (${data.sender_role})` : data.sender_type;
+}
+
+function baseFields(payload: WebhookPayload) {
+  const { data } = payload;
+  const fields: any[] = [
+    { title: 'Sender', value: senderDisplay(payload), short: true },
+    { title: 'Platform', value: proper(data.platform), short: true },
+    { title: 'Source', value: data.source.replace('_',' ').toUpperCase(), short: true },
+    { title: '', value: `_Conv: ${shortId(data.conversation_id)}_`, short: true }
+  ];
+  return fields;
+}
+
+function maybeAddReservation(payload: WebhookPayload, attachment: any) {
+  const { data } = payload;
+  if (data.reservation_id !== data.conversation_id) {
+    attachment.fields.push({ title: '', value: `_Res: ${shortId(data.reservation_id)}_`, short: true });
+  }
+}
+
+function maybeAddAttachments(payload: WebhookPayload, attachment: any) {
+  const { data } = payload;
+  if (data.attachments && data.attachments.length > 0) {
+    const attachmentInfo = data.attachments.map(att => `📎 ${att.type}: ${att.url}`).join('\n');
+    attachment.fields.push({ title: 'Attachments', value: attachmentInfo, short: false });
+  }
+}
+
+function shortId(id: string): string { return id.substring(0,8) + '...'; }
+function proper(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+function truncate(s: string, n: number): string { return s.length > n ? s.slice(0,n-1) + '…' : s; }
+function escapeSlack(s: string): string { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
