@@ -34,7 +34,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     try {
       const payload: WebhookPayload = await request.json();
   const styleParam = (url.searchParams.get('style') || '').toLowerCase();
-  const style: MessageStyle = styleParam === 'blocks' || styleParam === 'minimal' || styleParam === 'attachment' ? styleParam as MessageStyle : 'attachment';
+  const style: MessageStyle = ['simple','blocks','minimal','attachment'].includes(styleParam) ? styleParam as MessageStyle : 'simple';
   await postToSlack(payload, env, style);
       return new Response('Message posted to Slack', { status: 200 });
     } catch (error) {
@@ -46,7 +46,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   }
 }
 
-type MessageStyle = 'attachment' | 'blocks' | 'minimal';
+type MessageStyle = 'simple' | 'attachment' | 'blocks' | 'minimal';
 
 async function postToSlack(payload: WebhookPayload, env: Env, style: MessageStyle): Promise<void> {
   const message = formatSlackMessage(payload, style);
@@ -83,9 +83,40 @@ function formatSlackMessage(payload: WebhookPayload, style: MessageStyle): Slack
     case 'minimal':
       return buildMinimalMessage(payload);
     case 'attachment':
-    default:
       return buildAttachmentMessage(payload);
+    case 'simple':
+    default:
+      return buildSimpleMessage(payload);
   }
+}
+
+// New default: simple blocks-based message without side color, message inside code block, sequential IDs
+function buildSimpleMessage(payload: WebhookPayload): SlackMessage {
+  const { data } = payload;
+  const blocks: any[] = [];
+  // Sender / role line
+  blocks.push({
+    type: 'section',
+    text: { type: 'mrkdwn', text: `*${escapeSlack(data.sender.full_name)}* — ${senderDisplay(payload)} (${proper(data.platform)})` }
+  });
+  // Body as code block (fallback if empty)
+  const body = data.body && data.body.trim().length ? data.body : '(empty message)';
+  blocks.push({
+    type: 'section',
+    text: { type: 'mrkdwn', text: '```' + escapeSlack(body) + '```' }
+  });
+  // Metadata lines sequential (no columns)
+  let metaLines: string[] = [];
+  metaLines.push(`Source: ${data.source.replace('_',' ').toUpperCase()}`);
+  metaLines.push(`Conversation: ${data.conversation_id}`);
+  if (data.reservation_id !== data.conversation_id) metaLines.push(`Reservation: ${data.reservation_id}`);
+  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: metaLines.join('\n') } });
+  // Attachments (if any) each on its own line after a title
+  if (data.attachments && data.attachments.length) {
+    const lines = data.attachments.map(a => `• ${a.type}: ${a.url}`).join('\n');
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Attachments*\n${lines}` } });
+  }
+  return { text: '', blocks };
 }
 
 // Style 1: Original attachment-based message (cleaned)
