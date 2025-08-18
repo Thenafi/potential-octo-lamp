@@ -1,14 +1,16 @@
 // This file is the entry point of the Cloudflare Worker. It listens for incoming webhook requests and processes the data to post messages to Slack.
 
-import { WebhookPayload, SlackMessage } from './types';
+import { WebhookPayload, SlackMessage, HospitableReservationResponse, HospitableProperty } from './types';
 
 // Configuration - Post to specific channel
 const SLACK_CHANNEL_ID = 'C08R24HBK7F';
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
+const HOSPITABLE_API_URL = 'https://public.api.hospitable.com/v2/reservations';
 
 // Environment interface for Cloudflare Workers
 interface Env {
   SLACK_BOT_TOKEN: string;
+  HOSPITABLE_API_TOKEN: string;
 }
 
 // Channel routing logic - always post to the specified channel
@@ -63,8 +65,41 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
 type MessageStyle = 'simple' | 'attachment' | 'blocks' | 'minimal';
 
+async function fetchPropertyDetails(reservationId: string, env: Env): Promise<HospitableProperty | null> {
+  try {
+    const response = await fetch(`${HOSPITABLE_API_URL}/${reservationId}?include=properties`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${env.HOSPITABLE_API_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to fetch property details: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const data: HospitableReservationResponse = await response.json();
+    
+    // Return the first property if available
+    if (data.data.properties && data.data.properties.length > 0) {
+      return data.data.properties[0];
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error fetching property details:', error);
+    return null;
+  }
+}
+
 async function postToSlack(payload: WebhookPayload, env: Env, style: MessageStyle): Promise<void> {
-  const message = formatSlackMessage(payload, style);
+  // Fetch property details using the reservation_id from the webhook payload
+  const propertyDetails = await fetchPropertyDetails(payload.data.reservation_id, env);
+  
+  const message = formatSlackMessage(payload, style, propertyDetails);
   const channel = getSlackChannel(payload);
   
   // Use Slack Web API to post messages
@@ -91,22 +126,22 @@ async function postToSlackAPI(message: SlackMessage, channel: string, env: Env):
   }
 }
 
-function formatSlackMessage(payload: WebhookPayload, style: MessageStyle): SlackMessage {
+function formatSlackMessage(payload: WebhookPayload, style: MessageStyle, propertyDetails: HospitableProperty | null = null): SlackMessage {
   switch (style) {
     case 'blocks':
-      return buildBlocksMessage(payload);
+      return buildBlocksMessage(payload, propertyDetails);
     case 'minimal':
-      return buildMinimalMessage(payload);
+      return buildMinimalMessage(payload, propertyDetails);
     case 'attachment':
-      return buildAttachmentMessage(payload);
+      return buildAttachmentMessage(payload, propertyDetails);
     case 'simple':
     default:
-      return buildSimpleMessage(payload);
+      return buildSimpleMessage(payload, propertyDetails);
   }
 }
 
 // New default: simple blocks-based message without side color, message inside code block, sequential IDs
-function buildSimpleMessage(payload: WebhookPayload): SlackMessage {
+function buildSimpleMessage(payload: WebhookPayload, propertyDetails: HospitableProperty | null = null): SlackMessage {
   const { data } = payload;
   const blocks: any[] = [];
   // Sender / role line with optional image
@@ -125,6 +160,15 @@ function buildSimpleMessage(payload: WebhookPayload): SlackMessage {
   }
   
   blocks.push(senderSection);
+
+  // Property information (if available)
+  if (propertyDetails) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `🏠 *Property:* ${escapeSlack(propertyDetails.public_name)}` }
+    });
+  }
+
   // Body as code block (fallback if empty)
   const body = data.body && data.body.trim().length ? data.body : '(empty message)';
   blocks.push({
@@ -150,14 +194,14 @@ function buildSimpleMessage(payload: WebhookPayload): SlackMessage {
 }
 
 // Style 1: Original attachment-based message (cleaned)
-function buildAttachmentMessage(payload: WebhookPayload): SlackMessage {
+function buildAttachmentMessage(payload: WebhookPayload, propertyDetails: HospitableProperty | null = null): SlackMessage {
   const { data } = payload;
   const color = deriveColor(data.sender_type, data.platform);
   const attachment: any = {
     color,
     author_name: data.sender.full_name,
     text: data.body,
-    fields: baseFields(payload)
+    fields: baseFields(payload, propertyDetails)
   };
   
   // Add author icon only if thumbnail_url exists
@@ -174,7 +218,7 @@ function buildAttachmentMessage(payload: WebhookPayload): SlackMessage {
 }
 
 // Style 2: Blocks layout (richer, modern Slack UI)
-function buildBlocksMessage(payload: WebhookPayload): SlackMessage {
+function buildBlocksMessage(payload: WebhookPayload, propertyDetails: HospitableProperty | null = null): SlackMessage {
   const { data } = payload;
   const headerText = `${data.sender.full_name}`;
   const blocks: any[] = [];
@@ -194,6 +238,15 @@ function buildBlocksMessage(payload: WebhookPayload): SlackMessage {
   }
   
   blocks.push(headerSection);
+
+  // Property information (if available)
+  if (propertyDetails) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `🏠 *Property:* ${escapeSlack(propertyDetails.public_name)}` }
+    });
+  }
+
   // Context (sender + platform + source)
   blocks.push({
     type: 'context',
