@@ -201,7 +201,7 @@ function buildSimpleMessage(payload: WebhookPayload, propertyDetails: Hospitable
   blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `:link: <${workerUrl}|Open in Hospitable Inbox>` } });
   // Attachments (if any) each on its own line after a title
   if (data.attachments && data.attachments.length) {
-    const lines = data.attachments.map(a => `• ${a.type}: ${formatUrlAsHyperlink(a.url)}`).join('\n');
+    const lines = data.attachments.map((a, index) => `• <${a.url}|${getAttachmentLabel(a.type, index + 1)}>`).join('\n');
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Attachments*\n${lines}` } });
   }
   return { text: '', blocks };
@@ -291,7 +291,7 @@ function buildBlocksMessage(payload: WebhookPayload, propertyDetails: Hospitable
   blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `:link: <${workerUrl}|Open in Hospitable Inbox>` } });
   // Attachments list
   if (data.attachments && data.attachments.length) {
-    const lines = data.attachments.map(a => `• ${a.type}: ${formatUrlAsHyperlink(a.url)}`).join('\n');
+    const lines = data.attachments.map((a, index) => `• <${a.url}|${getAttachmentLabel(a.type, index + 1)}>`).join('\n');
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Attachments*\n${lines}` } });
   }
   return { text: '', blocks };
@@ -363,19 +363,25 @@ function maybeAddReservation(payload: WebhookPayload, attachment: any) {
 function maybeAddAttachments(payload: WebhookPayload, attachment: any) {
   const { data } = payload;
   if (data.attachments && data.attachments.length > 0) {
-    const attachmentInfo = data.attachments.map(att => `📎 ${att.type}: ${formatUrlAsHyperlink(att.url)}`).join('\n');
+    const attachmentInfo = data.attachments.map((att, index) => `📎 <${att.url}|${getAttachmentLabel(att.type, index + 1)}>`).join('\n');
     attachment.fields.push({ title: 'Attachments', value: attachmentInfo, short: false });
   }
 }
 
-// Helper function to format long URLs as hyperlinks
-function formatUrlAsHyperlink(url: string): string {
-  // If URL is longer than 50 characters, create a hyperlink with shortened text
-  if (url.length > 50) {
-    const filename = url.split('/').pop() || 'Link';
-    return `<${url}|${filename}>`;
-  }
-  return url;
+// Helper function to generate attachment labels like "Image 1", "Document 2", etc.
+function getAttachmentLabel(type: string, index: number): string {
+  const typeMap: { [key: string]: string } = {
+    'image': 'Image',
+    'photo': 'Image',
+    'picture': 'Image',
+    'document': 'Document',
+    'file': 'File',
+    'pdf': 'Document',
+    'video': 'Video'
+  };
+  
+  const label = typeMap[type.toLowerCase()] || 'File';
+  return `${label} ${index}`;
 }
 
 // Encode a UUID as base64 (URL-safe, no padding)
