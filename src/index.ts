@@ -20,6 +20,13 @@ export default {
 };
 
 async function handleRequest(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  
+  // Check if the request is for the /messages endpoint
+  if (url.pathname !== '/messages') {
+    return new Response('Not Found - Use /messages endpoint', { status: 404 });
+  }
+  
   if (request.method === 'POST') {
     try {
       const payload: WebhookPayload = await request.json();
@@ -30,7 +37,7 @@ async function handleRequest(request: Request): Promise<Response> {
       return new Response('Error processing request', { status: 400 });
     }
   } else {
-    return new Response('Method not allowed', { status: 405 });
+    return new Response('Method not allowed - Use POST', { status: 405 });
   }
 }
 
