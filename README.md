@@ -175,19 +175,6 @@ curl -X POST http://localhost:8787/messages?style=blocks \
 curl http://localhost:8787/conversation/YWJjMTIzNDU2Nzg5
 ```
 
-## Key Features Explained
-
-### Property Integration
-The worker automatically fetches property details from Hospitable API using the `reservation_id` from the webhook payload, displaying property name and ID in the message.
-
-### ID Encoding
-Conversation and reservation IDs are encoded using URL-safe base64 to create shorter, more manageable identifiers in messages.
-
-### Smart URL Formatting
-Long attachment URLs are automatically converted to hyperlinks with shortened display text (filename only) for better readability.
-
-### Conversation Redirect
-The `/conversation/{encoded_id}` endpoint provides a convenient way to redirect users directly to the Hospitable inbox conversation.
 
 ## Architecture
 
