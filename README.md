@@ -16,33 +16,6 @@ A Cloudflare Worker that receives Hospitable webhooks and posts formatted messag
 - ✅ **Attachment Handling**: Processes and displays message attachments with smart URL formatting
 - ✅ **ID Encoding**: Base64 URL-safe encoding for conversation and reservation IDs
 
-## Message Formatting Styles
-
-The worker supports 4 different message formatting styles, selectable via URL parameter `?style=<style>`:
-
-### 1. Simple Style (Default)
-- Clean block-based layout with code-formatted message body
-- Includes property information when available
-- Sequential metadata display
-- Direct conversation link to Hospitable inbox
-
-### 2. Blocks Style
-- Modern Slack blocks UI with rich formatting
-- Header with sender context and optional profile image
-- Property information prominently displayed
-- Metadata in compact context blocks
-
-### 3. Attachment Style
-- Traditional Slack attachment format with colored sidebar
-- Color coding based on sender type and platform
-- Structured field layout
-- Support for author icons
-
-### 4. Minimal Style
-- Single-line summary format
-- Truncated message preview (80 chars)
-- Essential information only
-- Ideal for high-volume channels
 
 ## API Endpoints
 
