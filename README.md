@@ -4,7 +4,6 @@ A Cloudflare Worker that receives Hospitable webhooks and posts formatted messag
 
 - `SLACK_BOT_TOKEN`: Your Slack Bot Token (required)
 - `HOSPITABLE_API_TOKEN`: Your Hospitable API token (required)
-```gration.
 
 ## Features
 
