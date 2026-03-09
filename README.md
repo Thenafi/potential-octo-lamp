@@ -15,6 +15,7 @@ A Cloudflare Worker that receives Hospitable webhooks and posts formatted messag
 - ✅ **TypeScript Support**: Fully typed for better development experience
 - ✅ **Attachment Handling**: Processes and displays message attachments with smart URL formatting
 - ✅ **ID Encoding**: Base64 URL-safe encoding for conversation and reservation IDs
+<img width="789" height="611" alt="image" src="https://github.com/user-attachments/assets/ed6bcfea-aadf-44ad-8192-5a5c43376560" />
 
 
 ## API Endpoints
